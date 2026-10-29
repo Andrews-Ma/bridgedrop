@@ -1,0 +1,41 @@
+name: Build and reliability checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Core and sender tests
+        run: swift test
+      - name: Pairing confirmation and transfer queue
+        run: |
+          zsh scripts/check_pairing.sh
+          zsh scripts/check_model_transfers.sh
+      - name: Encrypted local and relay transfers
+        run: |
+          swift run bridgedrop-check local
+          python3 -m unittest discover -s relay/tests -v
+          python3 scripts/check_relay_integration.py
+      - name: Compile iOS simulator app
+        run: >-
+          xcodebuild -project BridgeDrop.xcodeproj -scheme BridgeDrop-iOS
+          -configuration Debug -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          CODE_SIGNING_ALLOWED=NO build
+      - name: Package macOS application
+        run: |
+          zsh scripts/build_mac.sh
+          python3 scripts/package_mac.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BridgeDrop-macOS-Apple-Silicon
+          path: |
+            outputs/release/*.zip
+            outputs/release/SHA256SUMS.txt
+          if-no-files-found: error

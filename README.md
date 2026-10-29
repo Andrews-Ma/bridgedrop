@@ -1,0 +1,51 @@
+# BridgeDrop · 轻传
+
+<img src="assets/app-icon.png" alt="BridgeDrop icon" width="96">
+
+English | [简体中文](README.zh-CN.md)
+
+A native Mac and iPhone app for sending files and pasted text between your own devices. It uses application pairing instead of AirDrop, iCloud or a shared Apple account. The current app interface is Simplified Chinese.
+
+## Download
+
+- **Mac:** [Apple silicon download](https://github.com/Andrews-Ma/bridgedrop/releases/tag/v1.1.0), macOS 13 or later. Unzip and move `轻传.app` to Applications. The download may trigger macOS security checks; follow the system guidance and [Apple's instructions](https://support.apple.com/102445).
+- **iPhone:** build `BridgeDrop-iOS` from `BridgeDrop.xcodeproj` with your own signing team. There is currently no App Store, TestFlight or installable IPA distribution. See [installation](docs/INSTALL.md) and [building](docs/BUILDING.md).
+
+## Use
+
+1. Open BridgeDrop on both devices. On the Mac open **配对** (Pair).
+2. Scan the invitation in BridgeDrop, or use the iPhone camera if it offers an app-link entry. If it does not, use **导入邀请码 → 扫描另一台设备** or paste the invitation inside BridgeDrop. Check the device information and explicitly confirm before pairing is saved.
+3. Select the authenticated device. Choose files, or paste text and send. The receiver approves each transfer. Received text is copied only when you choose to copy it.
+4. Keep both apps open. Transient network failures get bounded automatic recovery from the saved offset. After a longer interruption use **继续** (Continue). A rejected or cancelled transfer needs a new receive request.
+
+New QR codes contain an application link; legacy raw JSON invitations still work inside the app. Invitations contain pairing credentials: share them only with your own device and handle them in BridgeDrop, never a search box or QR decoding website. Simply opening a link only stages the confirmation page. On iPhone, explicitly enable the existing connection after returning from the background.
+
+## Reliability
+
+- 256 KiB chunks with persisted receiver offsets, identical-replay checks and final SHA-256 verification.
+- Saved-file completion is acknowledged only after verification, rename and ledger persistence.
+- Four bounded sender recovery attempts for transient errors; explicit rejection, bad ACKs and credential/TLS errors stop recovery.
+- At most two active senders, serialized file staging, cancellable queued work and no duplicate sender for a rapid retry.
+- Bonjour discovery, authenticated manual-IP fallback and network-change reprobes. One macOS instance per bundle identifier.
+- Active foreground transfers prevent idle sleep. iPhone backgrounding still pauses networking.
+- Text keeps its original UTF-8 bytes, including line breaks, whitespace and emoji. No clipboard monitoring or automatic clipboard replacement.
+
+Files are limited to 10 GiB, text to 1 MiB, and each selection to 20 files. These protocol limits are not claims of full-size device performance testing. Compress folders before sending.
+
+## Network and privacy
+
+The same reachable LAN is preferred; no Internet service is required for LAN transfers. Manual IP cannot bypass guest-network isolation. Port 47185 is an encrypted TCP application port, not a web page. Across different networks, configure your own [HTTPS relay](relay/README.md); there is no bundled public relay.
+
+CryptoKit AES-GCM protects the contents, with pairing secrets stored in Keychain. This is a shared-key pairing group, without forward secrecy or per-device key revocation. The relay receives ciphertext and routing metadata. Received files, text, outgoing staging and history are stored locally and are not separately encrypted by the application. Back up important files independently. See [architecture](docs/ARCHITECTURE.md).
+
+## Verification
+
+Version 1.1.0 passed 31 core/sender XCTest cases, 51 pairing checks, model queue/pause/cancel checks, 18 relay tests, and local encrypted TCP/relay integration with dropped acknowledgements and receiver restarts. iOS simulator and device-architecture builds pass with the iOS SDK. A dedicated simulator installs, launches and accepts a synthetic app-link dispatch. The new macOS GUI startup and displayed icon have not been visually checked in this run.
+
+Physical iPhone transfer, iOS 26.2 system-camera recognition, the visual confirmation page on iPhone, public HTTPS relay and real-network/background reliability remain unverified. See [validation](docs/VALIDATION.md). Design references and adoption decisions are in [research](docs/RESEARCH.md).
+
+## Develop and license
+
+Build, test and SDK instructions are in [BUILDING.md](docs/BUILDING.md). Swift has no third-party package dependencies; the optional relay uses Python's standard library. Source code and binary downloads are separate deliverables.
+
+[MIT License](LICENSE). The original application icon was generated with an image-generation tool; published PNGs have auxiliary metadata removed. The referenced open-source projects are design research, not bundled implementations. Review [PUBLISHING.md](PUBLISHING.md) before sharing changes.
