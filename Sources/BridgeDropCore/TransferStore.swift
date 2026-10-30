@@ -65,9 +65,28 @@ public actor TransferStore {
     }
 
     public func records() -> [TransferRecord] {
-        savedRecords.values.sorted {
+        savedRecords.values.filter { $0.hiddenFromHistory != true }.sorted {
             $0.updatedAt == $1.updatedAt ? $0.id < $1.id : $0.updatedAt > $1.updatedAt
         }
+    }
+
+    /// Hide finished entries while keeping the durable receipt needed for safe replay.
+    public func removeFromHistory(_ id: String) throws {
+        var record = try existing(id, senderID: nil)
+        guard [.completed, .rejected, .cancelled, .failed].contains(record.state) else {
+            throw TransferStoreError.invalidState
+        }
+        record.hiddenFromHistory = true
+        record.text = nil
+        try commit(record)
+    }
+
+    /// Keep receipts and received files; pending and active transfers are never touched.
+    public func clearFinishedHistory() throws {
+        let ids = savedRecords.values.filter {
+            $0.hiddenFromHistory != true && [.completed, .rejected, .cancelled, .failed].contains($0.state)
+        }.map(\.id)
+        for id in ids { try removeFromHistory(id) }
     }
 
     public func approve(_ id: String) throws {
@@ -95,7 +114,7 @@ public actor TransferStore {
         try commit(record)
     }
 
-    public func handle(_ request: WireRequest, senderID: String) async throws -> WireReply {
+    public func handle(_ request: WireRequest, senderID: String, autoApproveNew: Bool = false) async throws -> WireReply {
         guard CoreValidation.isUUID(senderID) else { throw TransferStoreError.invalidIdentifier }
         try ensureDirectories()
         switch request.operation {
@@ -114,6 +133,10 @@ public actor TransferStore {
             }
             let record = TransferRecord(manifest: manifest)
             try commit(record)
+            if autoApproveNew {
+                try approve(record.id)
+                return reply(try existing(record.id, senderID: senderID))
+            }
             return reply(record)
         case .status:
             let record = try existing(request.transferID, senderID: senderID)
@@ -379,7 +402,7 @@ public actor TransferStore {
                     record.error = "已保存文件缺失或长度发生变化。"
                     record.localPath = nil
                     record.text = nil
-                } else if record.manifest.kind == .text {
+                } else if record.manifest.kind == .text && record.hiddenFromHistory != true {
                     let finalHandle = try StoreFilesystem.openFile(finalURL, flags: O_RDONLY)
                     defer { try? finalHandle.close() }
                     let finalData = try finalHandle.readToEnd() ?? Data()

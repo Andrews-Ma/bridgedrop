@@ -39,7 +39,7 @@ private struct SendJob: Codable {
     @Published var records: [TransferRecord] = []
     @Published var outgoing: [OutgoingTransfer] = []
     @Published var status = "准备连接"
-    @Published var textDraft = ""
+    @Published var textDraft = "" { didSet { if textDraft != oldValue { draftRevision &+= 1 } } }
     @Published var inviteText = ""
     @Published private(set) var inviteLink = ""
     @Published var pairingMode = 0
@@ -56,6 +56,11 @@ private struct SendJob: Codable {
     @Published var scanning = false
     @Published var isRunning = false
     @Published var showInvite = false
+    @Published var autoAcceptEnabled = false {
+        didSet {
+            preferences.set(autoAcceptEnabled ? configuration.pairID : "", forKey: "BridgeDrop.autoAcceptPairID")
+        }
+    }
 
     private let deviceID: String
     private let root: URL
@@ -82,12 +87,17 @@ private struct SendJob: Codable {
     private let savePairing: (PairConfiguration) throws -> Void
     private let exchangeOverride: (@Sendable (WireRequest, String) async throws -> WireReply)?
     private var pairingNeedsSave = false
+    private let preferences: UserDefaults
+    private var draftRevision: UInt64 = 0
+    private var submittedDrafts: [String: (text: String, revision: UInt64)] = [:]
 
     init(deviceID: String = PairingVault.deviceID, dataRoot: URL? = nil,
          loadPairing: () throws -> PairConfiguration? = PairingVault.load,
          savePairing: @escaping (PairConfiguration) throws -> Void = PairingVault.save,
-         exchangeOverride: (@Sendable (WireRequest, String) async throws -> WireReply)? = nil) {
+         exchangeOverride: (@Sendable (WireRequest, String) async throws -> WireReply)? = nil,
+         preferences: UserDefaults = .standard) {
         self.deviceID = deviceID
+        self.preferences = preferences
         self.savePairing = savePairing
         self.exchangeOverride = exchangeOverride
         name = UserDefaults.standard.string(forKey: "BridgeDrop.name") ?? PairingVault.defaultName
@@ -108,6 +118,7 @@ private struct SendJob: Codable {
             initializationError = error.localizedDescription
         }
         relayURL = configuration.relayURL; relayToken = configuration.relayToken
+        autoAcceptEnabled = !configuration.pairID.isEmpty && preferences.string(forKey: "BridgeDrop.autoAcceptPairID") == configuration.pairID
         manualHost = configuration.preferredHost; manualPort = String(configuration.preferredPort)
         do {
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -241,6 +252,7 @@ private struct SendJob: Codable {
             let newConfiguration = preview.configuration
             try savePairing(newConfiguration)
             pairingNeedsSave = false
+            autoAcceptEnabled = false
             stop(); configuration = newConfiguration; responseCache.removeAll()
             endpoints.removeAll(); nearby.removeAll(); lastSeen.removeAll(); selectedPeerID = invitation.inviterID
             manualHost = newConfiguration.preferredHost; manualPort = String(newConfiguration.preferredPort)
@@ -296,7 +308,7 @@ private struct SendJob: Codable {
 
     func selectPeer(_ peer: Peer) { selectedPeerID = peer.id }
 
-    private func process(_ packet: SecurePacket) async throws -> SecurePacket {
+    func process(_ packet: SecurePacket) async throws -> SecurePacket {
         guard packet.pairID == configuration.pairID, packet.receiverID == deviceID,
               packet.senderID != deviceID, let store else { throw TransportError.invalidFrame }
         let fingerprintEncoder = JSONEncoder(); fingerprintEncoder.outputFormatting = [.sortedKeys]
@@ -307,7 +319,8 @@ private struct SendJob: Codable {
         }
         let pair = configuration
         let request = try PacketCrypto.open(packet, secret: pair.secret, as: WireRequest.self)
-        let savedReply = try await store.handle(request, senderID: packet.senderID)
+        let autoApprove = autoAcceptEnabled && pair.trustedNames[packet.senderID] != nil
+        let savedReply = try await store.handle(request, senderID: packet.senderID, autoApproveNew: autoApprove)
         let reply = request.operation == .ping ? WireReply(deviceID: deviceID, deviceName: name) : savedReply
         if request.operation == .ping { remember(packet.senderID, name: request.senderName ?? "已配对设备", detail: "已配对 · 连接可用") }
         let encrypted = try PacketCrypto.seal(reply, secret: pair.secret, pairID: pair.pairID,
@@ -318,7 +331,7 @@ private struct SendJob: Codable {
         return encrypted
     }
 
-    private func remember(_ id: String, name: String, detail: String) {
+    func remember(_ id: String, name: String, detail: String) {
         guard UUID(uuidString: id) != nil, id != deviceID else { return }
         let boundedName = String(name.prefix(100)); lastSeen[id] = Date()
         if let index = nearby.firstIndex(where: { $0.id == id }) { nearby[index].name = boundedName; nearby[index].detail = detail }
@@ -329,8 +342,12 @@ private struct SendJob: Codable {
             do { try savePairing(configuration) } catch { errorMessage = error.localizedDescription }
         }
     }
-    private func expirePeers() {
-        nearby.removeAll { Date().timeIntervalSince(lastSeen[$0.id] ?? .distantPast) > 100 }
+    func expirePeers(now: Date = Date()) {
+        let expired = Set(nearby.filter { now.timeIntervalSince(lastSeen[$0.id] ?? .distantPast) > 100 }.map(\.id))
+        guard !expired.isEmpty else { return }
+        nearby.removeAll { expired.contains($0.id) }
+        for id in expired { endpoints.removeValue(forKey: id); lastSeen.removeValue(forKey: id) }
+        if let selectedPeerID, expired.contains(selectedPeerID) { self.selectedPeerID = nearby.first?.id }
     }
     private func probePreferredHost() async {
         guard isRunning, !configuration.preferredHost.isEmpty,
@@ -455,7 +472,13 @@ private struct SendJob: Codable {
                 let response: SecurePacket
                 if let endpoint = endpoints[receiverID] {
                     do { response = try await LocalExchange.call(packet, endpoint: endpoint) }
-                    catch { if let relay { response = try await relay.call(packet) } else { throw error } }
+                    catch {
+                        if TransferRetry.isTransient(error), endpoints[receiverID] == endpoint {
+                            endpoints.removeValue(forKey: receiverID)
+                        }
+                        if let relay, TransferRetry.isTransient(error) { response = try await relay.call(packet) }
+                        else { throw error }
+                    }
                 } else if let relay { response = try await relay.call(packet) }
                 else { throw TransportError.peerUnavailable }
                 try verifyResponse(response, request: packet)
@@ -481,6 +504,7 @@ private struct SendJob: Codable {
                                             sha256: FileDigest.sha256(data: data), senderID: deviceID, senderName: name)
             jobs.append(SendJob(manifest: manifest, path: url.path, receiverID: recipient, pairID: configuration.pairID, state: "准备发送", progress: 0, error: nil))
             try persistJobs(); syncOutgoing(); beginSend(id)
+            submittedDrafts[id] = (textDraft, draftRevision)
         } catch { errorMessage = error.localizedDescription }
     }
 
@@ -565,6 +589,7 @@ private struct SendJob: Codable {
                 } else { self.updateJob(id, state: "可继续", error: error.localizedDescription) }
             }
             self.sendTasks.removeValue(forKey: id)
+            self.syncOutgoing()
             self.scheduleQueuedSends()
             self.updateActivity()
         }
@@ -584,7 +609,10 @@ private struct SendJob: Codable {
         case .sending(let bytes, let total): updateJob(id, state: "正在传输", progress: Double(bytes) / Double(max(1, total)), error: nil)
         case .reconnecting(let attempt): updateJob(id, state: "等待恢复连接", error: "正在自动重试（\(attempt)/4），已保存的数据会从断点继续。")
         case .verifying: updateJob(id, state: "等待校验与保存", error: nil)
-        case .completed: updateJob(id, state: "已送达", progress: 1, error: nil)
+        case .completed:
+            updateJob(id, state: "已送达", progress: 1, error: nil)
+            if let submitted = submittedDrafts.removeValue(forKey: id),
+               submitted.revision == draftRevision, submitted.text == textDraft { textDraft = "" }
         }
     }
     private func updateActivity() {
@@ -599,6 +627,7 @@ private struct SendJob: Codable {
                                             senderID: deviceID, senderName: name)
             jobs.append(SendJob(manifest: manifest, path: old.path, receiverID: old.receiverID,
                                 pairID: old.pairID, state: "准备发送", progress: 0, error: nil))
+            if let draft = submittedDrafts[old.manifest.id] { submittedDrafts[manifest.id] = draft }
             do { try persistJobs(); syncOutgoing(); beginSend(manifest.id) } catch { errorMessage = error.localizedDescription }
         } else { beginSend(transfer.id) }
     }
@@ -610,6 +639,50 @@ private struct SendJob: Codable {
         updateJob(transfer.id, state: "已取消", error: nil)
         if let job = jobs.first(where: { $0.manifest.id == transfer.id }), job.pairID == configuration.pairID {
             Task { _ = try? await exchange(WireRequest(operation: .cancel, transferID: transfer.id), receiverID: job.receiverID) }
+        }
+    }
+    func removeOutgoingHistory(_ transfer: OutgoingTransfer) {
+        guard sendTasks[transfer.id] == nil, !queuedSends.contains(transfer.id) else {
+            errorMessage = "传输仍在结束，请稍后再删除记录。"; return
+        }
+        if let index = jobs.firstIndex(where: { $0.manifest.id == transfer.id }) {
+            guard ["已送达", "已取消", "需重新发送", "发送失败"].contains(jobs[index].state) else { return }
+            let removed = jobs.remove(at: index)
+            do { try persistJobs(); outgoing.removeAll { $0.id == transfer.id }; submittedDrafts.removeValue(forKey: transfer.id); syncOutgoing() }
+            catch { jobs.insert(removed, at: index); errorMessage = error.localizedDescription }
+        } else if transfer.state == "准备失败" {
+            outgoing.removeAll { $0.id == transfer.id }
+        }
+    }
+    func removeReceivedHistory(_ record: TransferRecord) {
+        Task {
+            do { try await store?.removeFromHistory(record.id); await refreshRecords() }
+            catch { errorMessage = error.localizedDescription }
+        }
+    }
+    private func canRemoveOutgoing(_ transfer: OutgoingTransfer) -> Bool {
+        ["已送达", "已取消", "需重新发送", "发送失败", "准备失败"].contains(transfer.state)
+            && sendTasks[transfer.id] == nil && !queuedSends.contains(transfer.id)
+    }
+    var hasRemovableOutgoing: Bool { outgoing.contains(where: canRemoveOutgoing) }
+    var hasRemovableReceived: Bool { records.contains { [.completed, .rejected, .cancelled, .failed].contains($0.state) } }
+    func clearOutgoingHistory() {
+        let ids = Set(outgoing.filter(canRemoveOutgoing).map(\.id))
+        guard !ids.isEmpty else { return }
+        let oldJobs = jobs
+        jobs.removeAll { ids.contains($0.manifest.id) }
+        do {
+            try persistJobs()
+            outgoing.removeAll { ids.contains($0.id) }
+            for id in ids { submittedDrafts.removeValue(forKey: id) }
+            syncOutgoing()
+        } catch { jobs = oldJobs; errorMessage = error.localizedDescription }
+    }
+    func clearReceivedHistory() {
+        Task {
+            do { try await store?.clearFinishedHistory() }
+            catch { errorMessage = error.localizedDescription }
+            await refreshRecords()
         }
     }
     private func updateJob(_ id: String, state: String, progress: Double? = nil, error: String?) {
@@ -653,6 +726,7 @@ private struct SendJob: Codable {
     func forgetPairing() {
         do {
             let fresh = try PairConfiguration.fresh(); try savePairing(fresh)
+            autoAcceptEnabled = false
             stop(); configuration = fresh; responseCache.removeAll(); nearby.removeAll(); endpoints.removeAll(); lastSeen.removeAll()
             selectedPeerID = nil; relayURL = ""; relayToken = ""; manualHost = ""; manualPort = "47185"
             start(); status = "旧配对已解除，请重新扫描二维码"

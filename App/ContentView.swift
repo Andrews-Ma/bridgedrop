@@ -14,6 +14,8 @@ struct ContentView: View {
     @State private var showFilePicker = false
     @State private var showSettings = false
     @State private var reviewAfterSettings = false
+    @State private var confirmClearOutgoing = false
+    @State private var confirmClearReceived = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,12 +33,23 @@ struct ContentView: View {
                 .frame(minWidth: 360)
             }
             #else
-            ScrollView {
-                VStack(spacing: 20) {
-                    sendPane
-                    receivePane
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 20) {
+                        if model.records.contains(where: { $0.state == .awaitingApproval }) {
+                            Button {
+                                withAnimation { proxy.scrollTo("incoming-requests", anchor: .top) }
+                            } label: {
+                                Label(tr("查看待确认的接收请求"), systemImage: "tray.and.arrow.down.fill")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                        sendPane
+                        receivePane.id("incoming-requests")
+                    }
+                    .padding(16)
                 }
-                .padding(16)
             }
             #endif
         }
@@ -135,6 +148,12 @@ struct ContentView: View {
                               detail: tr("在两台设备上打开轻传，先完成配对。同一局域网中会自动发现设备。"))
                     Button(tr("配对设备")) { model.showInvite = true }
                         .buttonStyle(.borderedProminent)
+                    DisclosureGroup(tr("连接诊断")) {
+                        Text(tr("请让两端轻传保持打开，检查本地网络权限和 Wi-Fi 是否互通。访客网络可能阻止设备互访；自动发现失败时可在设置中使用对方的局域网地址。不同网络需配置中继。"))
+                            .font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button(tr("打开连接设置")) { showSettings = true }.buttonStyle(.bordered)
+                    }
                 } else {
                     VStack(spacing: 8) {
                         ForEach(model.nearby) { peer in
@@ -204,14 +223,22 @@ struct ContentView: View {
 
             if !model.outgoing.isEmpty {
                 BridgePanel(title: tr("发送记录"), symbol: "arrow.up.circle") {
+                    if model.hasRemovableOutgoing {
+                        HStack { Spacer(); Button(tr("清除所有发送记录")) { confirmClearOutgoing = true }.buttonStyle(.borderless) }
+                    }
                     VStack(spacing: 14) {
                         ForEach(model.outgoing) { transfer in
                             OutgoingRow(transfer: transfer,
                                         retry: { model.retry(transfer) },
-                                        cancel: { model.cancel(transfer) })
+                                        cancel: { model.cancel(transfer) },
+                                        remove: { model.removeOutgoingHistory(transfer) })
                         }
                     }
                 }
+                .confirmationDialog(tr("清除所有已结束的发送记录？"), isPresented: $confirmClearOutgoing, titleVisibility: .visible) {
+                    Button(tr("清除记录"), role: .destructive) { model.clearOutgoingHistory() }
+                    Button(tr("取消"), role: .cancel) {}
+                } message: { Text(tr("仅清除已结束的记录；进行中和可继续的传输会保留。")) }
             }
         }
     }
@@ -221,8 +248,17 @@ struct ContentView: View {
             HStack {
                 Text(tr("接收")).font(.title2.bold())
                 Spacer()
-                Label(tr("接收前需确认"), systemImage: "hand.raised")
+                Toggle(tr("自动接收"), isOn: $model.autoAcceptEnabled)
+                    .toggleStyle(.switch)
+                    .font(.caption)
+            }
+            if model.autoAcceptEnabled {
+                Text(tr("已配对设备的新请求会自动接收；文字不会自动覆盖剪贴板。"))
                     .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(tr("配对组共享密钥；如邀请码或密钥泄露，请移除配对并重新配对。"))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             let pending = model.records.filter { $0.state == .awaitingApproval }
             if !pending.isEmpty {
@@ -251,16 +287,24 @@ struct ContentView: View {
                     EmptyHint(symbol: "tray", title: tr("这里还没有内容"),
                               detail: tr("对方发送后，接收请求会出现在这里。文字不会自动覆盖你的剪贴板。"))
                 } else {
+                    if model.hasRemovableReceived {
+                        HStack { Spacer(); Button(tr("清除所有接收记录")) { confirmClearReceived = true }.buttonStyle(.borderless) }
+                    }
                     VStack(spacing: 18) {
                         ForEach(history) { record in
                             ReceivedRow(record: record,
                                         copy: { model.copyText(record) },
-                                        reveal: { model.reveal(record) })
+                                        reveal: { model.reveal(record) },
+                                        remove: { model.removeReceivedHistory(record) })
                             if record.id != history.last?.id { Divider() }
                         }
                     }
                 }
             }
+            .confirmationDialog(tr("清除所有已结束的接收记录？"), isPresented: $confirmClearReceived, titleVisibility: .visible) {
+                Button(tr("清除记录"), role: .destructive) { model.clearReceivedHistory() }
+                Button(tr("取消"), role: .cancel) {}
+            } message: { Text(tr("仅从列表移除已结束的记录；待确认、进行中的传输、已保存文件及恢复数据会保留。")) }
             Text(tr("iPhone 传输期间请保持轻传在前台。网络中断后，可以重新打开应用并重试发送。"))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -331,6 +375,8 @@ private struct OutgoingRow: View {
     let transfer: OutgoingTransfer
     let retry: () -> Void
     let cancel: () -> Void
+    let remove: () -> Void
+    @State private var confirmRemove = false
 
     private var canRetry: Bool {
         guard !["准备文件", "准备失败", "已送达"].contains(transfer.state) else { return false }
@@ -355,7 +401,7 @@ private struct OutgoingRow: View {
                 Spacer()
                 Text(tr(transfer.state)).font(.caption).foregroundStyle(.secondary)
             }
-            if transfer.state == tr("准备文件") {
+            if transfer.state == "准备文件" {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
                     Text(tr("正在暂存文件，请稍候…")).font(.caption).foregroundStyle(.secondary)
@@ -367,7 +413,7 @@ private struct OutgoingRow: View {
                 Text(tr(error)).font(.caption).foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if transfer.state == tr("准备失败") {
+            if transfer.state == "准备失败" {
                 Text(tr("请重新选择文件发送。")).font(.caption).foregroundStyle(.secondary)
             }
             HStack {
@@ -376,8 +422,15 @@ private struct OutgoingRow: View {
                 Spacer()
                 if canRetry { Button(tr(retryLabel), action: retry).buttonStyle(.bordered) }
                 if canCancel { Button(tr("取消"), role: .cancel, action: cancel).buttonStyle(.borderless) }
+                if ["已送达", "已取消", "需重新发送", "发送失败", "准备失败"].contains(transfer.state) {
+                    Button(tr("删除记录")) { confirmRemove = true }.buttonStyle(.borderless)
+                }
             }
         }
+        .confirmationDialog(tr("删除这条记录？"), isPresented: $confirmRemove, titleVisibility: .visible) {
+            Button(tr("删除记录"), role: .destructive, action: remove)
+            Button(tr("取消"), role: .cancel) {}
+        } message: { Text(tr("仅从列表移除；已保存文件和传输恢复所需的数据会保留。")) }
     }
 }
 
@@ -387,6 +440,8 @@ private struct ReceivedRow: View {
     let record: TransferRecord
     let copy: () -> Void
     let reveal: () -> Void
+    let remove: () -> Void
+    @State private var confirmRemove = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -424,7 +479,14 @@ private struct ReceivedRow: View {
                 Text(tr(error)).font(.caption).foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if record.state != .receiving {
+                Button(tr("删除记录")) { confirmRemove = true }.buttonStyle(.borderless)
+            }
         }
+        .confirmationDialog(tr("删除这条记录？"), isPresented: $confirmRemove, titleVisibility: .visible) {
+            Button(tr("删除记录"), role: .destructive, action: remove)
+            Button(tr("取消"), role: .cancel) {}
+        } message: { Text(tr("仅从列表移除；已保存文件和传输恢复所需的数据会保留。")) }
     }
 
     private func stateLabel(_ state: TransferState) -> String {

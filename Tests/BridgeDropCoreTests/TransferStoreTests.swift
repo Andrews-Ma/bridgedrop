@@ -64,6 +64,76 @@ final class TransferStoreTests: XCTestCase {
         await expectError { try await store.approve(item.id) }
     }
 
+    func testRemovingHistoryPreservesReceivedFileAndReplayAcrossRestart() async throws {
+        let first = try store()
+        let bytes = Data("history retention 测试".utf8)
+        let item = manifest(bytes)
+        _ = try await offer(item, to: first)
+        await expectError { try await first.removeFromHistory(item.id) }
+        try await first.approve(item.id)
+        await expectError { try await first.removeFromHistory(item.id) }
+        _ = try await send(bytes, offset: 0, id: item.id, to: first)
+        _ = try await finish(item.id, store: first)
+        let finishedRecords = await first.records()
+        let path = try XCTUnwrap(finishedRecords.first?.localPath)
+        try await first.removeFromHistory(item.id)
+        let visible = await first.records()
+        XCTAssertTrue(visible.isEmpty)
+        XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: path)), bytes)
+        let restored = try store()
+        let restoredRecords = await restored.records()
+        XCTAssertTrue(restoredRecords.isEmpty)
+        let replay = try await offer(item, to: restored)
+        XCTAssertEqual(replay.state, .completed)
+        let finishReplay = try await finish(item.id, store: restored)
+        XCTAssertEqual(finishReplay.state, .completed)
+    }
+
+    func testRemovingTextHistoryDropsLedgerCopyButRetainsReceipt() async throws {
+        let first = try store()
+        let bytes = Data("unique test text 内容".utf8)
+        let item = manifest(bytes, kind: .text)
+        _ = try await offer(item, to: first)
+        try await first.approve(item.id)
+        _ = try await send(bytes, offset: 0, id: item.id, to: first)
+        _ = try await finish(item.id, store: first)
+        try await first.removeFromHistory(item.id)
+        let ledger = try Data(contentsOf: root.appendingPathComponent("Ledger/" + item.id + ".json"))
+        let decoded = try JSONDecoder().decode(TransferRecord.self, from: ledger)
+        XCTAssertNil(decoded.text)
+        let restored = try store()
+        let reply = try await offer(item, to: restored)
+        XCTAssertEqual(reply.state, .completed)
+        let visible = await restored.records()
+        XCTAssertTrue(visible.isEmpty)
+    }
+
+    func testClearFinishedHistoryPreservesPendingActiveFilesAndReceipts() async throws {
+        let first = try store()
+        let bytes = Data("finished fixture".utf8)
+        let complete = manifest(bytes)
+        let pending = manifest(Data("pending".utf8))
+        let active = manifest(Data("active".utf8))
+        _ = try await offer(complete, to: first)
+        try await first.approve(complete.id)
+        _ = try await send(bytes, offset: 0, id: complete.id, to: first)
+        _ = try await finish(complete.id, store: first)
+        let finished = await first.records()
+        let path = try XCTUnwrap(finished.first?.localPath)
+        _ = try await offer(pending, to: first)
+        _ = try await offer(active, to: first)
+        try await first.approve(active.id)
+        try await first.clearFinishedHistory()
+        let records = await first.records()
+        XCTAssertEqual(Set(records.map(\.id)), Set([pending.id, active.id]))
+        XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: path)), bytes)
+        let restored = try store()
+        let replay = try await offer(complete, to: restored)
+        XCTAssertEqual(replay.state, .completed)
+        let restoredRecords = await restored.records()
+        XCTAssertEqual(Set(restoredRecords.map(\.id)), Set([pending.id, active.id]))
+    }
+
     func testDurableOffsetSurvivesRestartAndIdenticalChunkReplay() async throws {
         let first = try store()
         let data = Data("a persistent transfer with 汉字".utf8)

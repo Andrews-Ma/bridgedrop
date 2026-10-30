@@ -8,17 +8,21 @@ A native Mac and iPhone app for sending files and pasted text between your own d
 
 ## Download
 
-- **Mac:** [Apple silicon download](../../releases/tag/v1.2.0), macOS 13 or later. Unzip and move `轻传.app` to Applications. The download may trigger macOS security checks; follow the system guidance and [Apple's instructions](https://support.apple.com/102445).
+- **Mac:** [Apple silicon download](../../releases/tag/v1.3.0), macOS 13 or later. Unzip and move `轻传.app` to Applications. The download may trigger macOS security checks; follow the system guidance and [Apple's instructions](https://support.apple.com/102445).
 - **iPhone:** build `BridgeDrop-iOS` from `BridgeDrop.xcodeproj` with your own signing team. There is currently no App Store, TestFlight or installable IPA distribution. See [installation](docs/INSTALL.md) and [building](docs/BUILDING.md).
 
 ## Use
 
 1. Open BridgeDrop on both devices. On the Mac open **Pair**.
 2. Scan the invitation in BridgeDrop, or use the iPhone camera if it offers an app-link entry. If it does not, use **Pair → Import invitation → Scan another device** or paste the invitation inside BridgeDrop. Check the device information and explicitly confirm before pairing is saved.
-3. Select the authenticated device. Choose files, or paste text and send. The receiver approves each transfer. Received text is copied only when you choose to copy it.
+3. Select the authenticated device. Choose files, or paste text and send. The receiver approves each transfer, or can enable auto-accept for new requests from the current paired group. Received text is copied only when you choose to copy it.
 4. Keep both apps open. Transient network failures get bounded automatic recovery from the saved offset. After a longer interruption use **Resume**. A rejected or cancelled transfer needs a new receive request.
 
 New QR codes contain an application link; legacy raw JSON invitations still work inside the app. Invitations contain pairing credentials: share them only with your own device and handle them in BridgeDrop, never a search box or QR decoding website. Simply opening a link only stages the confirmation page. On iPhone, explicitly enable the existing connection after returning from the background.
+
+### History and auto-accept
+
+Auto-accept is off by default and applies to new requests from the current paired group; each device controls its own setting. Existing pending requests still require approval. Delivered text clears the input only when it has not been edited since submission. Finished history entries can be removed individually or in bulk; received files and recovery receipts are retained.
 
 ## Reliability
 
@@ -40,9 +44,9 @@ CryptoKit AES-GCM protects the contents, with pairing secrets stored in Keychain
 
 ## Verification
 
-Version 1.2.0 passed 31 core/sender XCTest cases, 51 pairing checks, model queue/pause/cancel checks, 18 relay tests, and local encrypted TCP/relay integration with dropped acknowledgements and receiver restarts. iOS simulator and device-architecture builds pass with the iOS SDK. A dedicated simulator installs, launches and accepts a synthetic app-link dispatch. The new macOS GUI startup and displayed icon have not been visually checked in this run.
+Local Mac and iPhone testing covered bidirectional text, a 5 KB file and a 2 MiB file, automatic acceptance and manual approval. Automated checks cover core storage, sender recovery, pairing, history, draft editing and local encrypted TCP/relay behavior. iOS simulator and device builds compile. See the validation record for the tested version and scope.
 
-Physical iPhone transfer, iOS 26.2 system-camera recognition, the visual confirmation page on iPhone, public HTTPS relay and real-network/background reliability remain unverified. See [validation](docs/VALIDATION.md). Design references and adoption decisions are in [research](docs/RESEARCH.md).
+iOS 26.2 system-camera recognition, public HTTPS relay, very large files and broader real-network/background reliability remain unverified. See [validation](docs/VALIDATION.md). Design references and adoption decisions are in [research](docs/RESEARCH.md).
 
 ## Develop and license
 

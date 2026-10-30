@@ -66,7 +66,92 @@ private actor QueuePeer {
         try await waitFor { model.outgoing.first(where: { $0.id == pending.id })?.state == "已送达" }
         let after = await peer.snapshot().1.count
         guard after == before + 1 else { throw TransportError.invalidFrame }
+        guard model.textDraft.isEmpty else { throw TransportError.invalidFrame }
+        let completed = model.outgoing.first(where: { $0.id == pending.id })!
+        model.removeOutgoingHistory(completed)
+        guard !model.outgoing.contains(where: { $0.id == completed.id }) else { throw TransportError.invalidFrame }
+        let reopened = AppModel(deviceID: UUID().uuidString, dataRoot: root,
+            loadPairing: { pair }, savePairing: { _ in writes += 1 })
+        guard !reopened.outgoing.contains(where: { $0.id == completed.id }) else { throw TransportError.invalidFrame }
         model.stop()
         print("PASS pause, explicit resume, rapid duplicate retry never starts a second sender")
+        print("PASS removing finished outgoing history persists across restart")
+        let heldPeer = QueuePeer()
+        let draftModel = AppModel(deviceID: UUID().uuidString, dataRoot: root.appendingPathComponent("draft"),
+            loadPairing: { pair }, savePairing: { _ in }, exchangeOverride: { request, _ in try await heldPeer.call(request) })
+        draftModel.isRunning = true
+        draftModel.selectedPeerID = UUID().uuidString
+        draftModel.textDraft = "submitted text"
+        draftModel.sendText()
+        try await waitFor { draftModel.outgoing.first?.state == "准备发送" || draftModel.outgoing.first?.state == "等待对方接收" }
+        draftModel.textDraft = "new text"
+        await heldPeer.release()
+        try await waitFor { draftModel.outgoing.first?.state == "已送达" }
+        guard draftModel.textDraft == "new text" else { throw TransportError.invalidFrame }
+        draftModel.textDraft = "finished text"
+        draftModel.sendText()
+        try await waitFor { draftModel.outgoing.first?.state == "已送达" }
+        guard draftModel.textDraft.isEmpty else { throw TransportError.invalidFrame }
+        draftModel.isRunning = false
+        draftModel.textDraft = "pending text"
+        draftModel.sendText()
+        let unfinishedID = draftModel.outgoing.first!.id
+        draftModel.clearOutgoingHistory()
+        guard draftModel.outgoing.count == 1, draftModel.outgoing.first?.id == unfinishedID,
+              draftModel.textDraft == "pending text" else { throw TransportError.invalidFrame }
+        print("PASS delivered draft clearing, edited draft preservation, and bulk outgoing cleanup preserving resumable work")
+        let suite = "BridgeDrop-auto-test-" + UUID().uuidString
+        let prefs = UserDefaults(suiteName: suite)!
+        defer { prefs.removePersistentDomain(forName: suite) }
+        let trusted = UUID().uuidString, unknown = UUID().uuidString, receiver = UUID().uuidString
+        var paired = try PairConfiguration.fresh()
+        paired.trustedNames[trusted] = "Test peer"
+        let autoRoot = root.appendingPathComponent("auto")
+        let auto = AppModel(deviceID: receiver, dataRoot: autoRoot,
+                            loadPairing: { paired }, savePairing: { _ in }, preferences: prefs)
+        func offer(_ sender: String, _ text: String, secret: Data? = nil) throws -> SecurePacket {
+            let bytes = Data(text.utf8)
+            let manifest = TransferManifest(id: UUID().uuidString, kind: .text, name: "text", byteCount: Int64(bytes.count),
+                                            sha256: FileDigest.sha256(data: bytes), senderID: sender, senderName: "Test peer")
+            return try PacketCrypto.seal(WireRequest(operation: .offer, manifest: manifest), secret: secret ?? paired.secret,
+                                         pairID: paired.pairID, senderID: sender, receiverID: receiver, requestID: UUID().uuidString)
+        }
+        func state(_ packet: SecurePacket) async throws -> TransferState? {
+            try PacketCrypto.open(try await auto.process(packet), secret: paired.secret, as: WireReply.self).state
+        }
+        let pendingPacket = try offer(trusted, "existing request")
+        guard try await state(pendingPacket) == .awaitingApproval else { throw TransportError.invalidFrame }
+        auto.autoAcceptEnabled = true
+        let trustedPacket = try offer(trusted, "new request")
+        let pendingRequest = try PacketCrypto.open(pendingPacket, secret: paired.secret, as: WireRequest.self)
+        let repeatedPending = try PacketCrypto.seal(pendingRequest, secret: paired.secret, pairID: paired.pairID,
+                                                     senderID: trusted, receiverID: receiver, requestID: UUID().uuidString)
+        guard try await state(trustedPacket) == .receiving,
+              try await state(try offer(unknown, "unknown")) == .awaitingApproval,
+              try await state(repeatedPending) == .awaitingApproval else { throw TransportError.invalidFrame }
+        let badPacket = try offer(trusted, "bad key", secret: Data(repeating: 7, count: 32))
+        do { _ = try await auto.process(badPacket); throw TransportError.invalidFrame }
+        catch is PacketCryptoError { }
+        catch { if error is TransportError { throw error } }
+        let restoredAuto = AppModel(deviceID: receiver, dataRoot: autoRoot,
+                                    loadPairing: { paired }, savePairing: { _ in }, preferences: prefs)
+        guard restoredAuto.autoAcceptEnabled else { throw TransportError.invalidFrame }
+        let differentPair = try PairConfiguration.fresh()
+        let other = AppModel(deviceID: receiver, dataRoot: root.appendingPathComponent("other"),
+                             loadPairing: { differentPair }, savePairing: { _ in }, preferences: prefs)
+        guard !other.autoAcceptEnabled else { throw TransportError.invalidFrame }
+        auto.autoAcceptEnabled = false
+        guard try await state(try offer(trusted, "disabled")) == .awaitingApproval else { throw TransportError.invalidFrame }
+        print("PASS auto-accept defaults off, authenticates trusted peers, preserves pending requests, persists per pairing, and disables immediately")
+        let discoveryModel = AppModel(deviceID: UUID().uuidString, dataRoot: root.appendingPathComponent("discovery"),
+                                      loadPairing: { pair }, savePairing: { _ in }, preferences: prefs)
+        let peerID = UUID().uuidString
+        discoveryModel.remember(peerID, name: "Discovery test", detail: "Local")
+        guard discoveryModel.selectedPeerID == peerID else { throw TransportError.invalidFrame }
+        discoveryModel.expirePeers(now: Date().addingTimeInterval(101))
+        guard discoveryModel.nearby.isEmpty, discoveryModel.selectedPeerID == nil else { throw TransportError.invalidFrame }
+        discoveryModel.remember(peerID, name: "Discovery test", detail: "Local")
+        guard discoveryModel.selectedPeerID == peerID else { throw TransportError.invalidFrame }
+        print("PASS stale peer expiration clears selection and permits rediscovery")
     }
 }

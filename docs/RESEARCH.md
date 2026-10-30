@@ -1,6 +1,6 @@
 # Reliability research — 2026-10-29
 
-BridgeDrop remains a small native Swift app for explicitly approved file and text transfers. The projects below were reviewed as design references; their source code, services, logos and dependencies are not bundled. BridgeDrop does not speak their wire protocols.
+BridgeDrop remains a small native Swift app for paired file and text transfers. Explicit approval is the default; an optional per-pair automatic acceptance setting was added later. The projects below were reviewed as design references; their source code, services, logos and dependencies are not bundled. BridgeDrop does not speak their wire protocols.
 
 | Reference | Relevant design | BridgeDrop decision |
 | --- | --- | --- |
@@ -14,8 +14,16 @@ BridgeDrop remains a small native Swift app for explicitly approved file and tex
 
 The app keeps at most two send tasks active; cancelled tasks stay registered until cleanup finishes. Waiting jobs can be cancelled before they are offered. Source-file preparation is serialized. A network path monitor refreshes the invitation address and authenticated discovery; a configured preferred address is probed again when needed. Active foreground transfers temporarily prevent idle sleep, and release this hold on pause/completion. macOS opens the existing process when another copy of the same bundle is launched.
 
-Pairing, approval, AES-GCM, on-disk receiving records and the TCP/relay wire format remain unchanged. Opening a pairing link still requires explicit confirmation before trust is saved or a new connection starts. Text is sent as UTF-8 without trimming or normalization, and never automatically overwrites the receiving clipboard.
+AES-GCM and the TCP/relay wire format remain unchanged. Automatic acceptance of new authenticated requests is optional and off by default. Opening a pairing link still requires explicit confirmation before trust is saved or a new connection starts. Text is sent as UTF-8 without trimming or normalization, and never automatically overwrites the receiving clipboard.
 
 ## Scope
 
 These mechanisms reduce common interruption and duplicate-send failures; they do not bypass Wi-Fi client isolation, iOS suspension, a missing relay, insufficient storage or a closed receiver. LocalSend is not cited as providing BridgeDrop-style crash recovery. This release does not add protocol interoperability, continuous clipboard monitoring, public relay infrastructure or background iPhone delivery.
+
+## Additional evaluation — 2026-10-30
+
+- [croc](https://github.com/schollz/croc) and [Magic Wormhole](https://github.com/magic-wormhole/magic-wormhole) offer useful pairing and relay designs. Their Go/Python implementations and protocol changes are not bundled; short-code security requires a complete reviewed protocol.
+- [KDE Connect iOS](https://github.com/KDE/kdeconnect-ios) and [Nextcloud iOS](https://github.com/nextcloud/ios) inform native lifecycle and file handling research. iOS background transfers would require a separately designed system-managed HTTP workflow and cannot be inferred from the current TCP listener.
+- [SwiftNIO](https://github.com/apple/swift-nio) is a mature network framework, but no dependency is added without measurements showing a benefit over Network.framework.
+- Version 1.3.0 invalidates expired peer selections and transiently failed cached LAN endpoints, and adds connection guidance. Persistent connections, pipelined acknowledgements and per-device identity require measurement, version negotiation and further security review.
+- LocalSend is Apache-2.0, croc and Magic Wormhole MIT, Syncthing MPL-2.0, and PairDrop GPL-3.0. These references are not copied into the application; any future code reuse must review the exact files and dependencies.

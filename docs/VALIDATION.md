@@ -1,18 +1,13 @@
-# 1.2.0 validation — 2026-10-30
+# Validation and limits — 2026-10-30
 
-| Check | Result |
-| --- | --- |
-| Core and sender XCTest | 31 passed, 0 failures |
-| Pairing regression | 51 passed, including new and legacy invitations, invalid input and no trust/write/connection before confirmation |
-| Translation | 16 behavior checks, explicit UI/scanner coverage, preserved user-supplied names and text, and isolated preference check passed |
-| Model queue and retry | Two active workers, queued cancellation, pause/resume and duplicate retry checks passed |
-| Mac application | Release build and signature verified; installed after full backup. English default, immediate Simplified Chinese and English switch, and Chinese preference after restart were verified in the real Mac UI. One installed process listened on port 47185. |
-| App icon | Rounded Mac PNG and extracted ICNS have transparent corners; iOS icon uses an opaque square source for the system mask. The rounded artwork was visually inspected. |
-| iOS | Simulator and unsigned device-architecture builds succeeded. No iPhone signing or physical-device install was performed. |
-| Privacy | The curated current source and package were checked for known personal names, local account paths, email addresses, credentials and image metadata. This is a targeted scan, not proof that every possible sensitive item is absent. |
+## Physical devices
 
-The existing public repository owner and historical Git commits retain their previous account and author metadata. The current source uses a neutral copyright attribution and generic default device names; an existing user-selected device name remains on the user's device. Local data, pairing credentials and received files were not changed by the installer.
+The locally installed Mac and iPhone builds preceding 1.3.0 were used for bidirectional text and file tests on the same reachable LAN. Text included Chinese, line breaks and emoji. A 5,200-byte text file and a 2 MiB binary file were sent in both directions; the files returned to Mac matched their original SHA-256 digests. Automatic acceptance was verified for text in both directions and for a file from Mac to iPhone; disabling it on Mac restored manual confirmation. A later local build cleared an unchanged text draft on verified delivery and displayed the two bulk-history confirmation dialogs on Mac.
 
-The 1.1.0 local TCP and relay recovery checks passed before this update; transfer protocol and encrypted transport code have not been changed. iOS 26.2 system-camera recognition, actual Mac ↔ iPhone file/text transfers, public HTTPS relay and background behavior remain unverified. Compiling an iOS app is not equivalent to installing or testing it on a physical iPhone.
+1.3.0 additionally changes peer expiration and transient LAN fallback. These source changes are covered by automated checks; they have not yet been subjected to an extensive physical-device fault or performance campaign. The iPhone system camera opening the invitation link, public HTTPS relay deployment, 10 GiB files, background operation and difficult real-world networks remain unverified.
 
-Use the commands in [BUILDING.md](BUILDING.md) to reproduce the automated checks. GitHub CI must be checked separately from local testing.
+## Automated checks
+
+Run the commands in [BUILDING.md](BUILDING.md). Checks exercise core storage and sender logic, pairing review, localization, icon masks, model queue and cancellation, automatic acceptance, draft protection, history deletion, stale-peer rediscovery, and local encrypted TCP and relay recovery with dropped acknowledgements and receiver restarts. CI builds an iOS simulator target and packages the Mac application. Test counts and CI status are available from the test output and GitHub Actions.
+
+Source and package audits are targeted checks, not proof that every sensitive value is absent. Existing public Git history remains unchanged. Applications use a shared pairing secret: compromise of the secret can compromise the pairing group, and per-device revocation and forward secrecy are not provided.

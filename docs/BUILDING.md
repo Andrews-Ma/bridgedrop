@@ -15,7 +15,7 @@ python3 scripts/check_relay_integration.py
 zsh scripts/build_mac.sh
 ```
 
-The macOS build produces `outputs/BridgeDrop-Mac-v1.2.0/轻传.app` for Apple silicon, with a local development signature. It does not install over existing apps. `BRIDGEDROP_OUTPUT_APP` selects an alternative output path; `BRIDGEDROP_SIGNING_IDENTITY` selects an existing signing identity. `BRIDGEDROP_RELEASE_DIR` chooses the package output directory.
+The macOS build produces `outputs/BridgeDrop-Mac-v1.3.0/轻传.app` for Apple silicon, with a local development signature. It does not install over existing apps. `BRIDGEDROP_OUTPUT_APP` selects an alternative output path; `BRIDGEDROP_SIGNING_IDENTITY` selects an existing signing identity. `BRIDGEDROP_RELEASE_DIR` chooses the package output directory.
 
 Open `BridgeDrop.xcodeproj` for the native targets. Build the iOS simulator without signing:
 

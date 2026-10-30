@@ -52,8 +52,8 @@ for platform, sdk, product, plist, bundle in [
         settings = {
             "CODE_SIGN_STYLE": "Automatic", "DEVELOPMENT_TEAM": "", "ENABLE_APP_SANDBOX": "NO",
             "GENERATE_INFOPLIST_FILE": "NO", "INFOPLIST_FILE": plist, "PRODUCT_BUNDLE_IDENTIFIER": bundle,
-            "PRODUCT_NAME": product, "SDKROOT": sdk, "SWIFT_VERSION": "5.0", "MARKETING_VERSION": "1.2.0",
-            "CURRENT_PROJECT_VERSION": "3", "SWIFT_OPTIMIZATION_LEVEL": "-Onone" if mode == "Debug" else "-O",
+            "PRODUCT_NAME": product, "SDKROOT": sdk, "SWIFT_VERSION": "5.0", "MARKETING_VERSION": "1.3.0",
+            "CURRENT_PROJECT_VERSION": "4", "SWIFT_OPTIMIZATION_LEVEL": "-Onone" if mode == "Debug" else "-O",
             "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG" if mode == "Debug" else "",
             "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon", "CLANG_ENABLE_MODULES": "YES", "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
         }

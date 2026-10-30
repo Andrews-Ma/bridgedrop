@@ -40,6 +40,8 @@ public struct TransferRecord: Codable, Sendable, Identifiable, Equatable {
     public var text: String?
     public var error: String?
     public var updatedAt: Date
+    // Optional for compatibility with existing ledgers.
+    public var hiddenFromHistory: Bool?
 
     public init(manifest: TransferManifest, state: TransferState = .awaitingApproval,
                 receivedBytes: Int64 = 0, localPath: String? = nil, text: String? = nil,
