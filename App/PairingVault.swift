@@ -82,9 +82,9 @@ enum PairingVault {
     }
     static var defaultName: String {
         #if os(iOS)
-        return UIDevice.current.name
+        return "iPhone"
         #else
-        return Host.current().localizedName ?? "我的 Mac"
+        return "Mac"
         #endif
     }
     static func validate(_ invitation: PairInvitation, ownDeviceID: String) throws -> PairConfiguration {

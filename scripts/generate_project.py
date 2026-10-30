@@ -26,6 +26,10 @@ for path in sources:
     refs.append(obj("ref:" + relative, f"isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = {quoted(relative)}; sourceTree = SOURCE_ROOT;"))
 
 asset_ref = obj("assets", "isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = assets/Assets.xcassets; sourceTree = SOURCE_ROOT;")
+localized_refs = []
+for language in ["en", "zh-Hans"]:
+    localized_refs.append(obj("infostrings:" + language, f"isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = {quoted(language)}; path = {quoted('config/' + language + '.lproj/InfoPlist.strings')}; sourceTree = SOURCE_ROOT;"))
+localized_group = obj("infostrings", f"isa = PBXVariantGroup; children = ({','.join(localized_refs)}); name = InfoPlist.strings; sourceTree = {quoted('<group>')};")
 products = []
 targets = []
 for platform, sdk, product, plist, bundle in [
@@ -41,14 +45,15 @@ for platform, sdk, product, plist, bundle in [
     phase = obj("sources:" + platform, f"isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = ({','.join(builds)}); runOnlyForDeploymentPostprocessing = 0;")
     frameworks = obj("frameworks:" + platform, "isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;")
     asset_build = obj("assetbuild:" + platform, f"isa = PBXBuildFile; fileRef = {asset_ref};")
-    resources = obj("resources:" + platform, f"isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = ({asset_build}); runOnlyForDeploymentPostprocessing = 0;")
+    localized_build = obj("infostringsbuild:" + platform, f"isa = PBXBuildFile; fileRef = {localized_group};")
+    resources = obj("resources:" + platform, f"isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = ({asset_build},{localized_build}); runOnlyForDeploymentPostprocessing = 0;")
     configurations = []
     for mode in ["Debug", "Release"]:
         settings = {
             "CODE_SIGN_STYLE": "Automatic", "DEVELOPMENT_TEAM": "", "ENABLE_APP_SANDBOX": "NO",
             "GENERATE_INFOPLIST_FILE": "NO", "INFOPLIST_FILE": plist, "PRODUCT_BUNDLE_IDENTIFIER": bundle,
-            "PRODUCT_NAME": product, "SDKROOT": sdk, "SWIFT_VERSION": "5.0", "MARKETING_VERSION": "1.1.0",
-            "CURRENT_PROJECT_VERSION": "2", "SWIFT_OPTIMIZATION_LEVEL": "-Onone" if mode == "Debug" else "-O",
+            "PRODUCT_NAME": product, "SDKROOT": sdk, "SWIFT_VERSION": "5.0", "MARKETING_VERSION": "1.2.0",
+            "CURRENT_PROJECT_VERSION": "3", "SWIFT_OPTIMIZATION_LEVEL": "-Onone" if mode == "Debug" else "-O",
             "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG" if mode == "Debug" else "",
             "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon", "CLANG_ENABLE_MODULES": "YES", "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
         }
@@ -72,11 +77,11 @@ for platform, sdk, product, plist, bundle in [
 </Scheme>''', encoding="utf-8")
 
 products_group = obj("products", f"isa = PBXGroup; children = ({','.join(products)}); name = Products; sourceTree = {quoted('<group>')};")
-main_group = obj("group", f"isa = PBXGroup; children = ({','.join(refs + [asset_ref, products_group])}); sourceTree = {quoted('<group>')};")
+main_group = obj("group", f"isa = PBXGroup; children = ({','.join(refs + [asset_ref, localized_group, products_group])}); sourceTree = {quoted('<group>')};")
 project_configs = []
 for mode in ["Debug", "Release"]:
     project_configs.append(obj("projectconfig:" + mode, f"isa = XCBuildConfiguration; buildSettings = {{ CLANG_ENABLE_OBJC_ARC = YES; }}; name = {mode};"))
 project_config_list = obj("projectconfigs", f"isa = XCConfigurationList; buildConfigurations = ({','.join(project_configs)}); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;")
-project_id = obj("project", f"isa = PBXProject; attributes = {{ LastUpgradeCheck = 2600; }}; buildConfigurationList = {project_config_list}; compatibilityVersion = {quoted('Xcode 14.0')}; developmentRegion = zh-Hans; hasScannedForEncodings = 0; knownRegions = (en,\"zh-Hans\",Base); mainGroup = {main_group}; productRefGroup = {products_group}; projectDirPath = \"\"; projectRoot = \"\"; targets = ({','.join(targets)});")
+project_id = obj("project", f"isa = PBXProject; attributes = {{ LastUpgradeCheck = 2600; }}; buildConfigurationList = {project_config_list}; compatibilityVersion = {quoted('Xcode 14.0')}; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en,\"zh-Hans\",Base); mainGroup = {main_group}; productRefGroup = {products_group}; projectDirPath = \"\"; projectRoot = \"\"; targets = ({','.join(targets)});")
 (PROJECT / "project.pbxproj").write_text("// !$*UTF8*$!\n{\n\tarchiveVersion = 1;\n\tclasses = {};\n\tobjectVersion = 56;\n\tobjects = {\n" + "\n".join(objects) + f"\n\t}};\n\trootObject = {project_id};\n}}\n", encoding="utf-8")
 print("Generated BridgeDrop.xcodeproj with iOS and Mac schemes")

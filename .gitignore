@@ -18,3 +18,5 @@ __pycache__/
 *.app/
 assets/app-icon-original.png
 assets/AppIcon.iconset/
+
+assets/mac-icon-source.png

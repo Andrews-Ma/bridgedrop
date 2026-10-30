@@ -37,7 +37,7 @@ final class ScannerViewController: UIViewController, AVCaptureMetadataOutputObje
         view.layer.addSublayer(layer)
         previewLayer = layer
 
-        message.text = "将另一台设备的邀请码二维码放入画面"
+        message.text = BridgeLocalization.current("将另一台设备的邀请码二维码放入画面")
         message.textColor = .white
         message.font = .preferredFont(forTextStyle: .body)
         message.textAlignment = .center
@@ -70,11 +70,11 @@ final class ScannerViewController: UIViewController, AVCaptureMetadataOutputObje
                 DispatchQueue.main.async {
                     guard let self, self.view.window != nil else { return }
                     if granted { self.configureAndStart() }
-                    else { self.showError("未获相机权限。请到系统设置中允许轻传使用相机，或返回后粘贴邀请码。") }
+                    else { self.showError(BridgeLocalization.current("未获相机权限。请到系统设置中允许轻传使用相机，或返回后粘贴邀请码。")) }
                 }
             }
         default:
-            showError("无法使用相机。请到系统设置中允许轻传使用相机，或返回后粘贴邀请码。")
+            showError(BridgeLocalization.current("无法使用相机。请到系统设置中允许轻传使用相机，或返回后粘贴邀请码。"))
         }
     }
 
@@ -115,7 +115,7 @@ final class ScannerViewController: UIViewController, AVCaptureMetadataOutputObje
                 self.session.startRunning()
             } catch {
                 DispatchQueue.main.async {
-                    self.showError("相机启动失败。可以返回后粘贴邀请码进行配对。")
+                    self.showError(BridgeLocalization.current("相机启动失败。可以返回后粘贴邀请码进行配对。"))
                 }
             }
         }

@@ -15,6 +15,9 @@ jobs:
         run: swift test
       - name: Pairing confirmation and transfer queue
         run: |
+          python3 scripts/check_localization.py
+          swiftc -parse-as-library scripts/check_icon.swift -o /tmp/bridgedrop-icon-check
+          /tmp/bridgedrop-icon-check assets/mac-icon.png assets/Assets.xcassets/AppIcon.appiconset/ios-1024.png
           zsh scripts/check_pairing.sh
           zsh scripts/check_model_transfers.sh
       - name: Encrypted local and relay transfers

@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>zh-Hans</string>
+	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>轻传</string>
+	<string>BridgeDrop</string>
 	<key>CFBundleName</key>
-	<string>轻传</string>
+	<string>BridgeDrop</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleExecutable</key>
@@ -28,9 +28,9 @@
 		</dict>
 	</array>
 	<key>CFBundleShortVersionString</key>
-	<string>1.1.0</string>
+	<string>1.2.0</string>
 	<key>CFBundleVersion</key>
-	<string>2</string>
+	<string>3</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchScreen</key>
@@ -42,13 +42,13 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>轻传需要发现并连接你的另一台设备，在局域网中传输文件和文本。</string>
+	<string>BridgeDrop discovers and connects to your other device to transfer files and text on your local network.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_bridgedrop._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>相机仅用于扫描另一台设备的配对二维码。</string>
+	<string>The camera is used only to scan another device’s pairing QR code.</string>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>

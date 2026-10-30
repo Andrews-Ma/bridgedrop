@@ -37,18 +37,24 @@ CATALOG.mkdir(exist_ok=True)
 icons = CATALOG / 'AppIcon.appiconset'
 icons.mkdir(exist_ok=True)
 resize(master, icons / 'ios-1024.png', 1024)
+mac_master = ASSETS / 'mac-icon.png'
+if (ASSETS / 'mac-icon-source.png').exists():
+    subprocess.run(['swift', str(ROOT / 'scripts/render_mac_icon.swift'), str(ASSETS / 'mac-icon-source.png'), str(mac_master)], check=True)
+    clean_png(mac_master)
+if not mac_master.exists():
+    raise SystemExit('Missing assets/mac-icon.png')
 entries = [{'idiom': 'universal', 'platform': 'ios', 'size': '1024x1024', 'filename': 'ios-1024.png'}]
 iconset = ASSETS / 'AppIcon.iconset'
 iconset.mkdir(exist_ok=True)
 for size in (16, 32, 128, 256, 512):
     for scale in (1, 2):
         name = f'icon_{size}x{size}' + ('@2x' if scale == 2 else '') + '.png'
-        resize(master, iconset / name, size * scale)
-        resize(master, icons / name, size * scale)
+        resize(mac_master, iconset / name, size * scale)
+        resize(mac_master, icons / name, size * scale)
         entries.append({'idiom': 'mac', 'size': f'{size}x{size}', 'scale': f'{scale}x', 'filename': name})
 (icons / 'Contents.json').write_text(json.dumps({'images': entries, 'info': {'author': 'xcode', 'version': 1}}, indent=2) + '\n')
 brand = CATALOG / 'BrandIcon.imageset'
-resize(master, brand / 'BrandIcon.png', 256)
+resize(mac_master, brand / 'BrandIcon.png', 256)
 (brand / 'Contents.json').write_text(json.dumps({'images': [{'filename': 'BrandIcon.png', 'idiom': 'universal'}],
                                               'info': {'author': 'xcode', 'version': 1}}, indent=2) + '\n')
 subprocess.run(['iconutil', '-c', 'icns', str(iconset), '-o', str(ASSETS / 'AppIcon.icns')], check=True)

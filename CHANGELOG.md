@@ -1,5 +1,12 @@
 # Changes
 
+## 1.2.0 — 2026-10-30
+
+- Default to English, with a persistent Simplified Chinese option in Settings. Localize pairing, transfer status, scanner and error messages while preserving saved transfer state and user-entered text.
+- Use a rounded, transparent macOS icon and retain a separate iOS system-masked icon.
+- Use generic default device names and remove personal account names and machine paths from current public source and package notes.
+- Preserve the transfer protocol, stored pairing credentials and saved files.
+
 ## 1.1.0 — 2026-10-29
 
 - Add a resumable sender with bounded transient recovery and exact acknowledgement checks.

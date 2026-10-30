@@ -4,11 +4,11 @@
 
 [English](README.md) | 简体中文
 
-在 Mac 与 iPhone 之间发送文件和粘贴文本的原生应用，通过应用内配对连接，不要求相同 Apple 账户，也不依赖隔空投送或 iCloud。
+在 Mac 与 iPhone 之间发送文件和粘贴文本的原生应用，通过应用内配对连接，不要求相同 Apple 账户，也不依赖隔空投送或 iCloud。界面默认英文，可在 Settings → Language 选择简体中文；选择会保留。
 
 ## 安装与使用
 
-- [下载 Mac 1.1.0](https://github.com/Andrews-Ma/bridgedrop/releases/tag/v1.1.0)：Apple 芯片、macOS 13 或更新版本。解压后将“轻传.app”放入应用程序目录。运行下载版不需要开发工具。macOS 可能提示安全检查，请按系统及 [Apple 官方指引](https://support.apple.com/102445)处理。
+- [下载 Mac 1.2.0](../../releases/tag/v1.2.0)：Apple 芯片、macOS 13 或更新版本。解压后将“轻传.app”放入应用程序目录。运行下载版不需要开发工具。macOS 可能提示安全检查，请按系统及 [Apple 官方指引](https://support.apple.com/102445)处理。
 - iPhone 目前提供源码和 Xcode 工程，需使用自己的 Team 构建安装，尚无 App Store、TestFlight 或可直接安装的 IPA。见[安装说明](docs/INSTALL.md)。
 
 两端打开轻传，在 Mac 显示配对邀请。iPhone 系统相机若提供轻传链接入口即可点击；否则用轻传内“导入邀请码 → 扫描另一台设备”，或文本导入。核对设备信息后明确确认，才会保存配对并连接。新二维码使用应用链接，旧 JSON 邀请仍能在应用内导入。邀请码含连接凭据，只应交给轻传处理，不应进入搜索框或在线解析网站。

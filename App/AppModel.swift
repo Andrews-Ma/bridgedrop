@@ -21,6 +21,7 @@ struct OutgoingTransfer: Identifiable {
     var state: String
     var progress: Double
     var error: String?
+    var kind: TransferKind? = nil
 }
 private struct SendJob: Codable {
     let manifest: TransferManifest
@@ -622,7 +623,7 @@ private struct SendJob: Codable {
     }
     private func syncOutgoing() {
         let preparing = outgoing.filter { entry in !jobs.contains(where: { $0.manifest.id == entry.id }) }
-        outgoing = jobs.reversed().map { OutgoingTransfer(id: $0.manifest.id, name: $0.manifest.name, state: $0.state, progress: $0.progress, error: $0.error) } + preparing
+        outgoing = jobs.reversed().map { OutgoingTransfer(id: $0.manifest.id, name: $0.manifest.name, state: $0.state, progress: $0.progress, error: $0.error, kind: $0.manifest.kind) } + preparing
     }
 
     private func refreshRecords() async { if let store { records = await store.records(); updateActivity() } }

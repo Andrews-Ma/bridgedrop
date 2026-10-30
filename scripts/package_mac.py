@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Package an already-built macOS application; verify ZIP and extracted signature."""
 import hashlib
+import os
 from pathlib import Path
 import plistlib
 import shutil
@@ -11,7 +12,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 version = plistlib.loads((ROOT / 'config/Mac-Info.plist').read_bytes())['CFBundleShortVersionString']
 app = ROOT / 'outputs' / ('BridgeDrop-Mac-v' + version) / '轻传.app'
-release = ROOT / 'outputs/release'
+release = Path(os.environ.get('BRIDGEDROP_RELEASE_DIR', str(ROOT / 'outputs/release')))
 release.mkdir(parents=True, exist_ok=True)
 archive = release / f'BridgeDrop-{version}-macOS-Apple-Silicon.zip'
 if archive.exists():
@@ -25,7 +26,7 @@ with tempfile.TemporaryDirectory(prefix='bridgedrop-package-') as directory:
     (staging / 'READ ME.txt').write_text(
         'BridgeDrop / 轻传 ' + version + '\n\nApple silicon Mac, macOS 13 or later. Unzip and move 轻传.app to Applications.\n'
         '适用于 Apple 芯片 Mac，macOS 13 或更新版本。解压后将轻传.app 移入应用程序目录。\n'
-        'iPhone installation and limitations: https://github.com/Andrews-Ma/bridgedrop\n', encoding='utf-8')
+        'For iPhone installation and limitations, see the README in the source package.\n', encoding='utf-8')
     subprocess.run(['ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', str(staging), str(archive)], check=True)
     with zipfile.ZipFile(archive) as value:
         if value.testzip():
